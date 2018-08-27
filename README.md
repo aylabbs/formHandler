@@ -1,5 +1,5 @@
 # formHandler
-Simple Node.js endpoint for AWS Lambda that handles multipart forms with attachments, sending and email with their contents
+Simple Node.js endpoint for AWS Lambda that handles multipart forms with attachments, sending an email with their contents
 
 
 # What is this for?
