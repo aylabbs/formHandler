@@ -1,31 +1,45 @@
-var aws = require('aws-sdk');
-var ses = new aws.SES();
-var nodemailer = require('nodemailer');
+const aws = require("aws-sdk"),
+  ses = new aws.SES(),
+  fs = require("fs"),
+  nodemailer = require("nodemailer");
 
-module.exports = (result) => {
+module.exports = result => {
   return new Promise((resolve, reject) => {
-    if (typeof result !== 'string') {
-      var mailOptions = {
-        from: 'INSERT SES VERIFIED EMAIL',
-        subject: `You got an inquiry from ${result.name}`,
-        html: `<h3>You got a contact message</h3> <p><b>From: </b>${result.name} <br /> <b>Subject: </b>${result.subject} <br /> <b>Message: </b>${result.message}</p>`,
-        to: 'INSERT SES VERIFIED EMAIL', //can be array
-        attachments: result.upload
+    try {
+      if (Object.keys(result).length === 0) {
+        reject(new Error("empty"));
+      }
+      const template = require("./email_template.js")(result);
+      const response = {};
+      const mailOptions = {
+        from: "SES VERIFIED EMAIL",
+        subject: template.subject,
+        replyTo: result.email,
+        text: template.text,
+        html: template.html,
+        to: ["SES VERIFIED EMAIL", "ANOTHER SES VERIFIED EMAIL"],
+        attachments: result.files
       };
-
-      var transporter = nodemailer.createTransport({
+      const transporter = nodemailer.createTransport({
         SES: ses
       });
 
       transporter.sendMail(mailOptions, (err, info) => {
         if (err) {
-          resolve(err);
+          reject(err);
         } else {
-          resolve("Success");
+          console.log("Mailer sent successfully");
+          response.status = 200;
+          response.body = template.responseBody;
+          for (const file of result.files) {
+            fs.unlinkSync(file.path);
+          }
+
+          resolve(response);
         }
       });
-    } else {
-      resolve(result);
+    } catch (err) {
+      reject(err);
     }
   });
 };
