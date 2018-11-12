@@ -29,12 +29,7 @@ An AWS account in a region that supports all 3 of the AWS components necessary t
   - in settings enable binary support, type in 'multipart/form-data' and save
   - enable CORS
   - deploy (use the provided link to endpoint in form script onSubmit)
-- Init cloned app in npm to pull required modules, then zip all contents in root dir of app
+- NPM install cloned app to pull required modules, then zip all contents in root dir of app
 - Upload zip in Lambda designer where it says edit code inline, select the other option to upload zip
 - Change variables in code to match your form fields and verified email address
 
-# Todo
-
-- Make prettier email
-- Validate fields 
-- Useful error handling
