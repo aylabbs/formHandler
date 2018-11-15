@@ -48,14 +48,16 @@ module.exports = event => {
                 })
               );
               // check type and resolve file if matches
-              Promise.all(filePromises).then(arr => {
-                if (arr[1] === "application/pdf") {
-                  result.files.push({ path: arr[0] });
-                  resolve("Correct filetype");
-                } else {
-                  reject(new Error("invalid format"));
-                }
-              });
+              Promise.all(filePromises)
+                .then(arr => {
+                  if (arr[1] === "application/pdf") {
+                    result.files.push({ path: arr[0] });
+                    resolve("Correct filetype");
+                  } else {
+                    reject(new Error("invalid format"));
+                  }
+                })
+                .catch(e => reject(e));
             } else {
               // continue. no file
               resolve("empty file");
@@ -81,13 +83,16 @@ module.exports = event => {
       );
 
       busboy.write(Buffer.from(event["body"].toString(), "base64"));
-      Promise.all(promises).then(arr => {
-        resolve(result);
-      });
+      // catch busboy error
     } catch (e) {
       console.log(inspect(event));
       console.log("Parser error");
       reject(e);
     }
+    Promise.all(promises)
+      .then(arr => {
+        resolve(result);
+      })
+      .catch(e => reject(e));
   });
 };
