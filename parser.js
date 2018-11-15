@@ -1,61 +1,89 @@
 const Busboy = require("busboy"),
   inspect = require("util").inspect,
   xss = require("xss"),
-  errorHandler = require("./error_handler"),
-  fileChecker = require("./file_checker");
+  FileType = require("stream-file-type"),
+  fs = require("fs");
 
 module.exports = event => {
   const result = {};
+  const promises = [];
   result.files = [];
   return new Promise((resolve, reject) => {
-    let fileFinished,
-      busboyFinished,
-      noFileExists = true;
-    const checkAllFinished = () => {
-      if (busboyFinished && (fileFinished || noFileExists)) {
-        resolve(result);
-      }
-    };
     try {
       const busboy = new Busboy({
         headers: event.headers
       });
-      busboy.on("file", (fieldname, file, filename) => {
-        file.on("error", e => {
-          errorHandler(e);
-        });
 
-        // avoid empty files bug
-        if (filename) {
-          // don't resolve; there is a file
-          noFileExists = false;
-          // wait for it...
-          fileFinished = false;
-          // write to /tmp, check magic number to validate
-          fileChecker(file, xss(filename), xss(fieldname))
-            // resolves with file path
-            .then(path => {
-              result.files.push({ path });
-              fileFinished = true;
-              // will resolve if busboy has emitted "end"
-              checkAllFinished();
-            })
-            .catch(e => reject(e));
-        }
+      busboy.on("file", (fieldname, file, filename) => {
+        // each file creates a unique promise. resolves on empty file
+        // or filetype match and write stream complete
+        promises.push(
+          new Promise((resolve, reject) => {
+            file.on("error", e => {
+              reject(e);
+            });
+
+            // avoid empty files bug
+            if (filename) {
+              const filePromises = [];
+              // e.g. /tmp/Resumes-JohnDoe.pdf
+              let path = `/tmp/${fieldname}-${filename}`;
+              let writeStream = fs.createWriteStream(path);
+              // promise a file will be saved
+              filePromises.push(
+                new Promise((resolve, reject) => {
+                  writeStream.on("close", () => {
+                    resolve(path);
+                  });
+                })
+              );
+              // promise a filetype
+              filePromises.push(
+                new Promise((resolve, reject) => {
+                  const detector = new FileType();
+                  file.pipe(detector).pipe(writeStream);
+                  detector.on("file-type", fileType => {
+                    resolve(fileType.mime);
+                  });
+                })
+              );
+              // check type and resolve file if matches
+              Promise.all(filePromises).then(arr => {
+                if (arr[1] === "application/pdf") {
+                  result.files.push({ path: arr[0] });
+                  resolve("Correct filetype");
+                } else {
+                  reject(new Error("invalid format"));
+                }
+              });
+            } else {
+              // continue. no file
+              resolve("empty file");
+            }
+          })
+        );
       });
-      busboy.on("field", (fieldname, val) => {
-        result[xss(fieldname)] = xss(val);
-      });
-      busboy.on("finish", () => {
-        busboyFinished = true;
-        // will resolve if no files queued
-        checkAllFinished();
-      });
-      busboy.on("error", e => {
-        console.log("Busboy error flag thrown");
-        reject(e);
-      });
+      // promise values. resolve when busboy finishes
+      promises.push(
+        new Promise((resolve, reject) => {
+          busboy.on("field", (fieldname, val) => {
+            result[xss(fieldname)] = xss(val);
+          });
+          // all files will have been emitted and added to promise list
+          // awaiting list ensures they all conditionally resolve in a completed stream
+          busboy.on("finish", () => {
+            resolve("Busboy ended");
+          });
+          busboy.on("error", e => {
+            reject(e);
+          });
+        })
+      );
+
       busboy.write(Buffer.from(event["body"].toString(), "base64"));
+      Promise.all(promises).then(arr => {
+        resolve(result);
+      });
     } catch (e) {
       console.log(inspect(event));
       console.log("Parser error");
