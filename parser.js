@@ -60,6 +60,7 @@ module.exports = event => {
                 .catch(e => reject(e));
             } else {
               // continue. no file
+              file.resume();
               resolve("empty file");
             }
           })
